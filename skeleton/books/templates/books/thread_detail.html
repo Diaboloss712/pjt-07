@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container my-5">
+  {% if thread.cover_img %}
+  <div class="mb-3" style="width: 100%;">
+    <img src="{{ thread.cover_img.url }}" alt="Thread Cover Image" class="img-fluid">
+  </div>
+  {% endif %}
+
+  <div class="d-flex flex-row justify-content-between align-items-between">
+    <h1 class="mb-3">{{ thread.title }}</h1>
+    <div>
+      {% if thread.user == user %}
+        <a href="{% url 'books:thread_update' book.pk thread.pk %}" class="btn btn-secondary">수정</a>
+        <form action="{% url 'books:thread_delete' book.pk thread.pk %}" method="POST" class="d-inline ms-2">
+          {% csrf_token %}
+          <input type="submit" value="삭제" class="btn btn-danger">
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  
+  <div class="mb-2">
+    <strong>도서:</strong> <a href="{% url 'books:detail' book.pk %}">{{ book.title }}</a>
+    <strong class="ms-2">작성자:</strong> <a href="{% url 'accounts:profile' thread.user.username %}">{{ thread.user.username }}</a>
+    <strong class="ms-2">독서일:</strong> {{ thread.reading_date }}
+  </div>
+  
+  <div class="mb-3">
+    <p>{{ thread.content }}</p>
+  </div>
+  
+  <div class="d-flex flex-row justify-content-start align-items-center gap-4">
+    <!-- 여기에 좋아요 관련 기능을 구현하시오 -->
+  <hr>
+  
+  <!-- 쓰레드 댓글 출력 섹션 -->
+  <h3>댓글</h3>
+  <div class="mb-3" id="comment-list">
+    {% for comment in thread.comments.all %}
+      <div id="comment-{{ comment.pk }}" class="d-flex flex-row align-items-baseline gap-2">
+        <p>{{ comment.content }}</p>
+        <small ><a href="{% url 'accounts:profile' comment.user.username %}"> ({{ comment.user.username }})</a></small>
+        {% if comment.user == user %}
+          <button class="delete-comment-btn " data-comment-id="{{ comment.pk }}">삭제</button>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p id="no-comments">작성된 댓글이 없습니다.</p>
+    {% endfor %}
+  </div>
+
+  <!-- 댓글 작성 폼 -->
+  <h4>댓글 작성</h4>
+  <form id="comment-form" method="POST" action="{% url 'books:create_comment' book.pk thread.pk %}">
+    {% csrf_token %}
+    {{ comment_form.content }}
+    <input type="submit" value="전송">
+  </form>
+  
+  <hr>
+  
+  <a href="{% url 'books:detail' thread.book.pk %}" class="btn btn-secondary">BACK</a>
+</div>
+{% endblock content %}
+

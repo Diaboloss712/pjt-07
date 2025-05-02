@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h1>메인 페이지</h1>
+
+  <!-- 기존 카테고리 필터 메뉴 -->
+  <div class="mb-4">
+    <ul class="list-inline">
+      <li class="list-inline-item">
+        <a href="{% url 'books:index' %}" class="category-link" data-category="">전체</a>
+      </li>
+      {% for category in categories %}
+        <li class="list-inline-item">
+          <a href="{% url 'books:index' %}?category={{ category.name|urlencode }}" class="category-link" data-category="{{ category.name }}">
+            {{ category.name }}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div>
+  <small style="color: #888;">
+    ※ 도서 DB 제공 : 알라딘 인터넷서점(www.aladin.co.kr)
+  </small>
+  </div>  
+
+  <!-- 도서 목록 컨테이너 -->
+  <div class="row row-cols-1 row-cols-md-3 g-4 mt-4 mb-4" id="books-list">
+    {% if books %}
+      {% for book in books %}
+      <div class="col">
+        <div class="card book-card h-100">
+          {% if book.cover %}
+            <img src="{{ book.cover }}" class="card-img-top" alt="...">
+          {% endif %}
+          <div class="card-body">
+            <h5 class="card-title">{{ book.title }}</h5>
+            <p class="card-text">{{ book.description|truncatechars:180 }}</p>
+            <h6 class="card-subtitle mb-2">
+              <a href="{% url 'books:detail' book.pk %}" class="btn btn-success">Detail</a>
+            </h6>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div>등록된 도서가 없습니다.</div>
+    {% endif %}
+  </div>
+{% endblock content %}
+
+{% block script %}
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+  // 모든 카테고리 링크 선택
+  const categoryLinks = document.querySelectorAll('.category-link');
+  const booksList = document.getElementById('books-list');
+
+  categoryLinks.forEach(link => {
+    link.addEventListener('click', function(event) {
+      event.preventDefault();
+      const category = event.currentTarget.dataset.category; // 선택된 카테고리 (전체일 경우 빈 문자열)
+
+      axios.get("{% url 'books:filter_category' %}", {
+        params: { category: category }
+      })
+      .then((response) => {
+        // 도서 목록 초기화
+        booksList.innerHTML = '';
+
+        // 응답받은 JSON 데이터를 기반으로 도서 카드 생성
+        response.data.books.forEach((book) => {
+          let imgHtml = '';
+          if (book.cover) {
+            imgHtml = `<img src="${book.cover}" class="card-img-top" alt="...">`;
+          }
+          const cardHtml = `
+            <div class="col">
+              <div class="card book-card h-100">
+                ${imgHtml}
+                <div class="card-body">
+                  <h5 class="card-title">${book.title}</h5>
+                  <p class="card-text">${book.description|truncatechars:180}</p>
+                  <h6 class="card-subtitle mb-2">
+                    <a href="/books/${book.id}/" class="btn btn-success">Detail</a>
+                  </h6>
+                </div>
+              </div>
+            </div>
+          `;
+          booksList.insertAdjacentHTML('beforeend', cardHtml);
+        });
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+    });
+  });
+</script>
+{% endblock script %}
