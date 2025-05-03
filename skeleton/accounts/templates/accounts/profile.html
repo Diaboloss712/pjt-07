@@ -23,10 +23,24 @@
     {% endfor %}
   </p>
   <hr>
+
+  <!-- 팔로우 버튼 및 팔로워/팔로잉 수 표시 -->
   <div class="d-flex flex-row justify-content-between align-items-center">
-    팔로잉 / 팔로우
+    <div>
+      <button id="follow-button" class="btn">
+        {% if person in request.user.followings.all %}
+          팔로우 취소
+        {% else %}
+          팔로우
+        {% endif %}
+      </button>
+    </div>
+    <div>
+      <p>팔로워: {{ person.followers.count }} | 팔로잉: {{ person.followings.count }}</p>
+    </div>
   </div>
   <hr>
+
   <h2>{{ person.username }}님의 쓰레드 목록</h2>
   <ul>
     {% for thread in person.thread_set.all %}
@@ -40,4 +54,34 @@
       <li>작성된 쓰레드가 없습니다.</li>
     {% endfor %}
   </ul>
+
 {% endblock content %}
+
+<script>
+document.getElementById('follow-button').addEventListener('click', function() {
+    let user_pk = {{ person.pk }};
+    
+    // AJAX 요청 보내기
+    fetch(`/accounts/${user_pk}/follow/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        // 팔로우 상태에 따른 버튼 텍스트 변경
+        if (data.followed) {
+            document.getElementById('follow-button').innerText = '팔로우 취소';
+        } else {
+            document.getElementById('follow-button').innerText = '팔로우';
+        }
+        // 팔로워/팔로잉 수 갱신 (선택 사항)
+        // 예: document.getElementById('followers-count').innerText = data.followers_count;
+        // 예: document.getElementById('followings-count').innerText = data.followings_count;
+    })
+    .catch(error => console.error('Error:', error));
+});
+</script>
+
