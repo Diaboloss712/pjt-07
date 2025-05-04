@@ -108,6 +108,7 @@ document.getElementById('comment-form').addEventListener('submit', function(even
     let formData = new FormData(this);
     let book_pk = {{ book.pk }};
     let thread_pk = {{ thread.pk }};
+    const form = this;
     
     fetch(`/books/${book_pk}/comment/${thread_pk}/create/`, {
         method: 'POST',
@@ -128,6 +129,7 @@ document.getElementById('comment-form').addEventListener('submit', function(even
                 </div>`;
             commentList.innerHTML += newCommentHTML;  // 댓글 목록에 새 댓글 추가
         }
+        form.reset()
     })
     .catch(error => console.error('Error:', error));
 });
