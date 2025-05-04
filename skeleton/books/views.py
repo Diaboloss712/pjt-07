@@ -68,6 +68,7 @@ def index(request):
 @require_safe
 def detail(request, book_pk):
     book = get_object_or_404(Book, pk=book_pk)
+    form = CommentForm()
     
     context = {
         'book': book,
@@ -103,10 +104,14 @@ def thread_create(request, book_pk):
 def thread_detail(request, book_pk, thread_pk):
     book = get_object_or_404(Book, pk=book_pk)
     thread = get_object_or_404(Thread, pk=thread_pk, book=book)
+    form = CommentForm()
+    comments = Comment.objects.filter(thread=thread)
 
     context = {
         'book': book,
         'thread': thread,
+        'comment_form': form,
+        'comments': comments,
     }
     return render(request, 'books/thread_detail.html', context)
 
@@ -173,9 +178,10 @@ def likes(request, book_pk, thread_pk):
 
 def filter_category(request):
     selected_category = request.GET.get('category', None)
+    category = Category.objects.get(name=selected_category)
 
     if selected_category:
-        books = Book.objects.filter(categories__name=selected_category)
+        books = Book.objects.filter(category=category)
     else:
         # 카테고리가 선택되지 않으면 모든 도서 조회
         books = Book.objects.all()
@@ -186,7 +192,7 @@ def filter_category(request):
         'author': book.author,
         'description': book.description,
         'book_id': book.pk,
-        'cover': book.cover.url if book.cover else None,
+        'cover': book.cover if book.cover else None,
     } for book in books]
 
     return JsonResponse({'books': book_list})
