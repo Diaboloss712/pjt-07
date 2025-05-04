@@ -8,7 +8,7 @@
   </div>
   {% endif %}
 
-  <div class="d-flex flex-row justify-content-between align-items-between">
+  <div class="d-flex flex-row justify-content-between align-items-center">
     <h1 class="mb-3">{{ thread.title }}</h1>
     <div>
       {% if thread.user == user %}
@@ -32,7 +32,16 @@
   </div>
   
   <div class="d-flex flex-row justify-content-start align-items-center gap-4">
-    <!-- 여기에 좋아요 관련 기능을 구현하시오 -->
+    <!-- 좋아요 버튼 -->
+    <button id="like-button" class="btn btn-primary">
+      {% if request.user in thread.likes.all %}
+        좋아요 취소
+      {% else %}
+        좋아요
+      {% endif %}
+    </button>
+    <p id="likes-count">{{ thread.likes.count }}명이 좋아요</p>
+  </div>
   <hr>
   
   <!-- 쓰레드 댓글 출력 섹션 -->
@@ -41,9 +50,9 @@
     {% for comment in thread.comments.all %}
       <div id="comment-{{ comment.pk }}" class="d-flex flex-row align-items-baseline gap-2">
         <p>{{ comment.content }}</p>
-        <small ><a href="{% url 'accounts:profile' comment.user.username %}"> ({{ comment.user.username }})</a></small>
+        <small><a href="{% url 'accounts:profile' comment.user.username %}"> ({{ comment.user.username }})</a></small>
         {% if comment.user == user %}
-          <button class="delete-comment-btn " data-comment-id="{{ comment.pk }}">삭제</button>
+          <button class="delete-comment-btn" data-comment-id="{{ comment.pk }}">삭제</button>
         {% endif %}
       </div>
     {% empty %}
@@ -53,7 +62,7 @@
 
   <!-- 댓글 작성 폼 -->
   <h4>댓글 작성</h4>
-  <form id="comment-form" method="POST" action="{% url 'books:create_comment' book.pk thread.pk %}">
+  <form id="comment-form" method="POST">
     {% csrf_token %}
     {{ comment_form.content }}
     <input type="submit" value="전송">
@@ -63,5 +72,88 @@
   
   <a href="{% url 'books:detail' thread.book.pk %}" class="btn btn-secondary">BACK</a>
 </div>
-{% endblock content %}
 
+<script>
+document.getElementById('like-button').addEventListener('click', function() {
+    let book_pk = {{ book.pk }};
+    let thread_pk = {{ thread.pk }};
+    
+    // AJAX 요청 보내기
+    fetch(`/books/${book_pk}/thread/${thread_pk}/likes/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        // 좋아요 상태에 따른 버튼 텍스트 변경
+        if (data.liked) {
+            document.getElementById('like-button').innerText = '좋아요 취소';
+        } else {
+            document.getElementById('like-button').innerText = '좋아요';
+        }
+        
+        // 좋아요 개수 갱신
+        document.getElementById('likes-count').innerText = `${data.likes_count}명이 좋아요`;
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+// 댓글 작성 처리
+document.getElementById('comment-form').addEventListener('submit', function(event) {
+    event.preventDefault();
+    
+    let formData = new FormData(this);
+    let book_pk = {{ book.pk }};
+    let thread_pk = {{ thread.pk }};
+    
+    fetch(`/books/${book_pk}/comment/${thread_pk}/create/`, {
+        method: 'POST',
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            // 새 댓글을 동적으로 추가
+            let commentList = document.getElementById('comment-list');
+            let newCommentHTML = `
+                <div id="comment-${data.comment_id}" class="d-flex flex-row align-items-baseline gap-2">
+                    <p>${data.content}</p>
+                    <small><a href="/accounts/${data.username}/profile/"> (${data.username})</a></small>
+                    <button class="delete-comment-btn" data-comment-id="${data.comment_id}">삭제</button>
+                </div>`;
+            commentList.innerHTML += newCommentHTML;  // 댓글 목록에 새 댓글 추가
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+// 댓글 삭제 처리
+document.querySelectorAll('.delete-comment-btn').forEach(button => {
+    button.addEventListener('click', function() {
+        let commentId = this.getAttribute('data-comment-id');
+        let bookPk = {{ book.pk }};
+        
+        fetch(`/books/${bookPk}/comment/${commentId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById(`comment-${data.comment_id}`).remove();
+            } else {
+                alert(data.error);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+});
+</script>
+{% endblock content %}

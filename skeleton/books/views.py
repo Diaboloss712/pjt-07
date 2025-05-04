@@ -1,135 +1,192 @@
 from django.http import JsonResponse
-from django.shortcuts import render, redirect
-from django.views.decorators.http import (
-    require_http_methods,
-    require_safe,
-    require_POST,
-)
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-
-from accounts.models import Category
-from .models import Book, Thread, Comment
-from .forms import ThreadForm, CommentForm
-from .utils import (
-    generate_image_with_openai,
-)
+from django.views.decorators.http import require_POST, require_safe, require_http_methods
+from .models import Book, Thread, Comment, Category
+from .forms import CommentForm, ThreadForm
 
 
-# Index 페이지
+# 쓰레드 댓글 생성
+@login_required
+@require_POST
+def create_comment(request, book_pk, thread_pk):
+    thread = get_object_or_404(Thread, pk=thread_pk, book__pk=book_pk)
+    
+    # 폼 데이터가 유효한지 확인
+    form = CommentForm(request.POST)
+    if form.is_valid():
+        comment = form.save(commit=False)
+        comment.thread = thread
+        comment.user = request.user
+        comment.save()
+
+        # 댓글 목록을 반환 (AJAX 요청에 대한 응답으로 JSON 반환)
+        comments = thread.comments.all()
+        return JsonResponse({
+            'content': comment.content,
+            'username': comment.user.username,
+            'comment_id': comment.pk,
+            'comments': [
+                {
+                    'content': c.content,
+                    'username': c.user.username,
+                    'comment_id': c.pk,
+                } for c in comments
+            ]
+        })
+    return JsonResponse({'error': '잘못된 요청입니다.'}, status=400)
+
+
+# 쓰레드 댓글 삭제
+@login_required
+@require_POST
+def delete_comment(request, book_pk, comment_pk):
+    comment = get_object_or_404(Comment, pk=comment_pk)
+    
+    # 댓글을 작성한 사용자만 삭제 가능
+    if comment.user == request.user:
+        comment.delete()
+        return JsonResponse({'success': True, 'comment_id': comment.pk})
+    else:
+        return JsonResponse({'error': '삭제 권한이 없습니다.'}, status=403)
+
+
+# 전체 도서 목록을 반환하는 index 뷰
 def index(request):
-    pass
+    books = Book.objects.all()
+    # 카테고리 목록도 함께 전달해 필터링 할 수 있게
+    categories = Category.objects.all()
 
-# 장르별 필터링
-def filter_category(request):
-    pass
+    context = {
+        'books': books,
+        'categories': categories,
+    }
+    return render(request, 'books/index.html', context)
 
+
+# 특정 도서의 상세 페이지를 반환하는 detail 뷰
 @require_safe
 def detail(request, book_pk):
-    book = Book.objects.get(pk=book_pk)
+    book = get_object_or_404(Book, pk=book_pk)
+    
     context = {
-        "book": book,
+        'book': book,
     }
-    return render(request, "books/detail.html", context)
+    return render(request, 'books/detail.html', context)
+
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def thread_create(request, book_pk):
-    book = Book.objects.get(pk=book_pk)
-    if request.method == "POST":
-        form = ThreadForm(request.POST, request.FILES)
+    book = get_object_or_404(Book, pk=book_pk)
+
+    if request.method == 'POST':
+        form = ThreadForm(request.POST)
         if form.is_valid():
             thread = form.save(commit=False)
             thread.book = book
             thread.user = request.user
-            thread.save()
+            thread.save() 
 
-            generated_image_path = generate_image_with_openai(thread.title, thread.content, book.title, book.author)
-            if generated_image_path:
-                thread.cover_img = generated_image_path
-                thread.save()
-                
-            return redirect("books:thread_detail", book.pk, thread.pk)
+            return redirect('books:thread_detail', book.pk, thread.pk)
     else:
         form = ThreadForm()
+
     context = {
-        "form": form,
-        "book": book,
+        'form': form,
+        'book': book,
     }
-    return render(request, "books/thread_create.html", context)
+    return render(request, 'books/thread_create.html', context)
 
 
-@login_required
 @require_safe
 def thread_detail(request, book_pk, thread_pk):
-    book = Book.objects.get(pk=book_pk)
-    thread = Thread.objects.get(pk=thread_pk)
-    comment_form = CommentForm()
-    context = {
-        "book" : book,
-        "thread": thread,
-        "comment_form" : comment_form,
-    }
-    return render(request, "books/thread_detail.html", context)
+    book = get_object_or_404(Book, pk=book_pk)
+    thread = get_object_or_404(Thread, pk=thread_pk, book=book)
 
+    context = {
+        'book': book,
+        'thread': thread,
+    }
+    return render(request, 'books/thread_detail.html', context)
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def thread_update(request, book_pk, thread_pk):
-    book = Book.objects.get(pk=book_pk)
-    thread = Thread.objects.get(pk=thread_pk)
-    comment_form = CommentForm(request.POST)
-    if thread.user == request.user:
-        if request.method == "POST":
-            form = ThreadForm(request.POST, request.FILES, instance=thread)
-            if form.is_valid():
-                form.save()  
-                return redirect('books:thread_detail', book_pk=book.pk, thread_pk=thread.pk)
-        else:
-            form = ThreadForm(instance=thread)
-    else :
-        return redirect('books:index') 
+    book = get_object_or_404(Book, pk=book_pk)
+    thread = get_object_or_404(Thread, pk=thread_pk, book=book)
+
+    # 쓰레드를 작성한 사용자만 수정할 수 있도록 확인
+    if thread.user != request.user:
+        return redirect('books:detail', book_pk=book.pk)
+
+    if request.method == 'POST':
+        form = ThreadForm(request.POST, instance=thread)
+        if form.is_valid():
+            form.save()  
+            return redirect('books:thread_detail', book.pk, thread.pk)
+    else:
+        form = ThreadForm(instance=thread)
+
     context = {
-        "form": form,
-        "book": book,
-        "comment_form" : comment_form,
+        'form': form,
+        'book': book,
+        'thread': thread,
     }
-    return render(request, "books/thread_update.html", context)
+    return render(request, 'books/thread_update.html', context)
 
 
 @login_required
 @require_POST
 def thread_delete(request, book_pk, thread_pk):
-    thread = Thread.objects.get(pk=thread_pk)
+    book = get_object_or_404(Book, pk=book_pk)
+    thread = get_object_or_404(Thread, pk=thread_pk, book=book)
+
+    # 쓰레드를 작성한 사용자만 삭제할 수 있도록 확인
     if thread.user == request.user:
-        thread.delete()
-    return redirect("books:detail", book_pk)
+        thread.delete() 
+        return redirect('books:detail', book.pk)  # 삭제 후 책 상세 페이지로 리디렉션
+    else:
+        return redirect('books:detail', book.pk)  # 삭제 권한이 없으면 책 상세 페이지로 리디렉션
 
 
-# 쓰레드 좋아요 비동기 처리
-@login_required
 def likes(request, book_pk, thread_pk):
-    book = Book.objects.get(pk=book_pk)
-    thread = Thread.objects.get(pk=thread.pk)
-    if request.user.is_authenticated():
-        if request.user in thread.likes.filter(pk=request.user.pk):
-            thread.likes.remove(request.user)
-            is_like = False
-        else:
-            thread.likes.add(request.user)
-            is_like = True
-        thread_likes = thread.likes.count()
-        context = {
-            'thread_likes': thread_likes,
-            'is_like': is_like
-        }
-        return JsonResponse(context)
-    return redirect('books:thread_detail',book_pk, thread_pk)
+    thread = get_object_or_404(Thread, pk=thread_pk, book__pk=book_pk)
+
+    # 사용자가 이미 좋아요를 눌렀는지 확인
+    if request.user in thread.likes.all():
+        # 이미 좋아요를 눌렀다면, 좋아요 취소
+        thread.likes.remove(request.user)
+        liked = False
+    else:
+        # 좋아요를 누르지 않았다면, 좋아요 추가
+        thread.likes.add(request.user)
+        liked = True
+
+    # 좋아요 개수 갱신
+    likes_count = thread.likes.count()
+
+    # 좋아요 상태와 좋아요 개수를 반환
+    return JsonResponse({'liked': liked, 'likes_count': likes_count})
 
 
-# 쓰레드 댓글 비동기 처리
-def create_comment(request, book_pk, thread_pk):
-    pass
+def filter_category(request):
+    selected_category = request.GET.get('category', None)
 
-def delete_comment(request, book_pk, comment_pk):
-    pass
+    if selected_category:
+        books = Book.objects.filter(categories__name=selected_category)
+    else:
+        # 카테고리가 선택되지 않으면 모든 도서 조회
+        books = Book.objects.all()
+
+    # 책 데이터 반환
+    book_list = [{
+        'title': book.title,
+        'author': book.author,
+        'description': book.description,
+        'book_id': book.pk,
+        'cover': book.cover.url if book.cover else None,
+    } for book in books]
+
+    return JsonResponse({'books': book_list})
