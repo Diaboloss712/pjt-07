@@ -68,24 +68,20 @@ def profile(request, username):
 @require_POST
 @login_required
 def follow(request, user_pk):
-    user_to_follow = get_object_or_404(User, pk=user_pk)
-    user = request.user
-
-    if user == user_to_follow:
-        return JsonResponse({'error': '자기 자신을 팔로우할 수 없습니다.'}, status=400)
-
-    # 팔로우 여부 확인
-    if user_to_follow in user.followings.all():
-        # 이미 팔로우한 경우, 팔로우 취소
-        user.followings.remove(user_to_follow)
-        followed = False
-    else:
-        # 팔로우하지 않은 경우, 팔로우
-        user.followings.add(user_to_follow)
-        followed = True
-
-    # 팔로워/팔로잉 수 갱신
-    followers_count = user_to_follow.followers.count()
-    followings_count = user.followings.count()
-
-    return JsonResponse({'followed': followed, 'followers_count': followers_count, 'followings_count': followings_count})
+    if request.user.is_authenticated:
+        User = get_user_model()
+        person = User.objects.get(pk=user_pk)
+        if request.user != person:
+            if person.followers.filter(pk=request.user.pk).exists():
+                person.followers.remove(request.user)
+                is_follow = False
+            else:
+                person.followers.add(request.user)
+                is_follow = True
+            followers_count = person.followers.count()
+            context = {
+                'followed': is_follow,
+                'followers_count': followers_count,
+            }
+            return JsonResponse(context)
+    return redirect('accounts:profile', person.username)

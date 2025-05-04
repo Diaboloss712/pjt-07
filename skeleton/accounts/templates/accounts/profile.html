@@ -36,7 +36,8 @@
       </button>
     </div>
     <div>
-      <p>팔로워: {{ person.followers.count }} | 팔로잉: {{ person.followings.count }}</p>
+      팔로잉 : <span id="followings-count">{{ person.followings.all|length }}</span> / 
+      팔로워 : <span id="followers-count">{{ person.followers.all|length }}</span>
     </div>
   </div>
   <hr>
@@ -57,9 +58,11 @@
 
 {% endblock content %}
 
+{% block script %}
 <script>
 document.getElementById('follow-button').addEventListener('click', function() {
     let user_pk = {{ person.pk }};
+    const csrf_token = document.querySelector('[name=csrfmiddlewaretoken]').value;
     
     // AJAX 요청 보내기
     fetch(`/accounts/${user_pk}/follow/`, {
@@ -78,10 +81,10 @@ document.getElementById('follow-button').addEventListener('click', function() {
             document.getElementById('follow-button').innerText = '팔로우';
         }
         // 팔로워/팔로잉 수 갱신 (선택 사항)
-        // 예: document.getElementById('followers-count').innerText = data.followers_count;
-        // 예: document.getElementById('followings-count').innerText = data.followings_count;
+        document.getElementById('followers-count').textContent = data.followers_count;
+        // document.getElementById('followings-count').innerText = data.followings_count;
     })
     .catch(error => console.error('Error:', error));
 });
 </script>
-
+{% endblock script %}
